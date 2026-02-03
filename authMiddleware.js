@@ -1,5 +1,27 @@
 const User = require('./User');
 
+const protect = async (req, res, next) => {
+  try {
+    const userId = req.headers['x-user-id'];
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Not authorized, no user ID provided' });
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(401).json({ message: 'Not authorized, user not found' });
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('Auth middleware error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 const protectAdmin = async (req, res, next) => {
   try {
     // 1. Get the user ID from the headers.
@@ -31,4 +53,4 @@ const protectAdmin = async (req, res, next) => {
   }
 };
 
-module.exports = { protectAdmin };
+module.exports = { protect, protectAdmin };
