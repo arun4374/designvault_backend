@@ -18,11 +18,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors({
-   origin: 'https://algoflow-sand.vercel.app/', // Replace with your frontend URL
-   credentials: true,
-   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'] // Explicitly allow x-user-id
- }));
+app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -249,3 +245,4 @@ app.put('/admin/contributions/:id/status', protectAdmin, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
