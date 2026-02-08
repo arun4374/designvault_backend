@@ -8,7 +8,8 @@ const SystemDesignContributionSchema = new mongoose.Schema({
     enum: ['Beginner', 'Intermediate', 'Advanced'],
     default: 'Intermediate'
   },
-  categories: [String], // e.g., ['LLD', 'HLD', 'Design Patterns']
+  category: { type: String, required: true },
+  types: { type: String, required: true },
   
   authorName: { type: String, required: true },
   authorProfileUrl: String,
@@ -16,10 +17,26 @@ const SystemDesignContributionSchema = new mongoose.Schema({
 
   // System Design specific fields
   files: [{
-    originalName: String,
-    filename: String,
-    path: String,
-    description: String
+    originalName: { type: String, required: true },
+    filename: { type: String, required: true },
+    path: { type: String, required: true },
+    description: String,
+    size: {
+      type: Number,
+      required: true,
+      validate: {
+        validator: function(v) { return v <= 204800; }, // Max 200KB (200 * 1024)
+        message: 'File size must be less than 200KB'
+      }
+    },
+    extension: {
+      type: String,
+      required: true,
+      enum: ['java', 'c', 'cpp', 'py'],
+      lowercase: true
+    },
+    mimetype: String,
+    hash: String // Store file hash for security/integrity checks
   }],
   
   status: {
