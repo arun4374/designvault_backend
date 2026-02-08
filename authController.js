@@ -6,14 +6,17 @@ const PORT = process.env.PORT || 3000;
 const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
-// Initialize Google OAuth Client
-const oAuth2Client = new OAuth2Client(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  `${BACKEND_URL}/auth/google/callback`
-);
+// Helper to create a new OAuth2Client instance
+const createOAuthClient = () => {
+  return new OAuth2Client(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    `${BACKEND_URL}/auth/google/callback`
+  );
+};
 
 exports.initiateGoogleLogin = (req, res) => {
+  const oAuth2Client = createOAuthClient();
   // Use the 'from' query param or default to frontend URL as state
   const state = req.query.from || FRONTEND_URL;
 
@@ -32,6 +35,7 @@ exports.initiateGoogleLogin = (req, res) => {
 };
 
 exports.handleGoogleCallback = async (req, res) => {
+  const oAuth2Client = createOAuthClient();
   const { code, state } = req.query;
 
   // Default to localhost:5173 if state is missing (e.g. direct access)
