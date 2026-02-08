@@ -5,6 +5,7 @@ const protect = async (req, res, next) => {
     const userId = req.headers['x-user-id'];
 
     if (!userId) {
+      console.warn('Auth Middleware: x-user-id header missing. Received headers:', req.headers);
       return res.status(401).json({ message: 'Not authorized, no user ID provided' });
     }
 
@@ -29,6 +30,7 @@ const protectAdmin = async (req, res, next) => {
     const userId = req.headers['x-user-id'];
 
     if (!userId) {
+      console.warn('Admin Auth Middleware: x-user-id header missing. Received headers:', req.headers);
       return res.status(401).json({ message: 'Not authorized, no user ID provided' });
     }
 
