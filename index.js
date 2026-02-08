@@ -8,9 +8,9 @@ require('dotenv').config();
 const connectDB = require('./db');
 const User = require('./User');
 const authController = require('./authController');
-const SystemDesignContribution = require('./Scheme_Model/SystemDesignContribution');
-const DSAContribution = require('./Scheme_Model/DSAContribution');
-const COutputContribution = require('./Scheme_Model/COutputContribution');
+const SystemDesignContribution = require('./Schema_Model/SystemDesignContribution');
+const DSAContribution = require('./Schema_Model/DSAContribution');
+const COutputContribution = require('./Schema_Model/COutputContribution');
 const { protect, protectAdmin } = require('./authMiddleware');
 
 const app = express();
@@ -232,4 +232,5 @@ app.put('/admin/contributions/:id/status', protectAdmin, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
 
