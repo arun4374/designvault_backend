@@ -6,7 +6,7 @@ const path = require('path');
 require('dotenv').config();
 
 const connectDB = require('./db');
-const User = require('./Scheme_Model/User');
+const User = require('./User');
 const authController = require('./authController');
 const SystemDesignContribution = require('./Scheme_Model/SystemDesignContribution');
 const DSAContribution = require('./Scheme_Model/DSAContribution');
@@ -232,3 +232,4 @@ app.put('/admin/contributions/:id/status', protectAdmin, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
