@@ -1,4 +1,4 @@
-const User = require('./User');
+const User = require('./Schema_Model/User');
 
 const protect = async (req, res, next) => {
   try {
