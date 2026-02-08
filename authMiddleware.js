@@ -54,4 +54,3 @@ const protectAdmin = async (req, res, next) => {
 };
 
 module.exports = { protect, protectAdmin };
-
