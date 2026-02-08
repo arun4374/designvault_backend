@@ -18,7 +18,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+   origin: 'https://algoflow-sand.vercel.app/', // Replace with your frontend URL
+   credentials: true,
+   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'] // Explicitly allow x-user-id
+ }));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -59,10 +63,12 @@ app.get('/auth/google', authController.initiateGoogleLogin);
  */
 app.get('/auth/google/callback', authController.handleGoogleCallback);
 
-/**
- * Route: POST /api/users/role
- * Description: Get user role by email for frontend protection
- */
+
+//  * Route: POST /api/users/role// Find your existing app.use(cors()) and replace it with this:
+ 
+ 
+//  * Description: Get user role by email for frontend protection
+
 app.post('/api/users/role', protect, (req, res) => {
   // req.user is populated by the protect middleware
   res.json({ role: req.user.role });
