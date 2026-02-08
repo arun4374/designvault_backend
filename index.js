@@ -24,7 +24,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Multer Configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = 'uploads/';
+    const uploadDir = path.join(__dirname, 'uploads');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir);
     }
@@ -36,7 +36,10 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 200 * 1024 } // 200KB limit
+});
 
 
 // Connect DB
@@ -68,7 +71,19 @@ app.post('/api/users/role', protect, (req, res) => {
  * Route: POST /api/contributions
  * Description: Submit a new contribution
  */
-app.post('/api/contributions', protect, upload.array('files'), async (req, res) => {
+app.post('/api/contributions', protect, (req, res, next) => {
+  upload.array('files')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      // A Multer error occurred when uploading.
+      return res.status(400).json({ success: false, message: `Upload error: ${err.message}` });
+    } else if (err) {
+      // An unknown error occurred when uploading.
+      return res.status(500).json({ success: false, message: `Unknown upload error: ${err.message}` });
+    }
+    // Everything went fine.
+    next();
+  });
+}, async (req, res) => {
   try {
     const { type, fileMetadata, ...data } = req.body;
     const userId = req.user._id;
@@ -174,7 +189,7 @@ app.get('/admin/contributions/pending', protectAdmin, async (req, res) => {
   }
 });
 
-/**
+d /**
  * ADMIN: UPDATE CONTRIBUTION STATUS
  */
 app.put('/admin/contributions/:id/status', protectAdmin, async (req, res) => {
