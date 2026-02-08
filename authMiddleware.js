@@ -1,4 +1,4 @@
-const User = require('./Schema_Model/User');
+const User = require('./User');
 
 const protect = async (req, res, next) => {
   try {
@@ -54,3 +54,4 @@ const protectAdmin = async (req, res, next) => {
 };
 
 module.exports = { protect, protectAdmin };
+
