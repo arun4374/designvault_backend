@@ -3,6 +3,7 @@ const cors = require('cors');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const connectDB = require('./db');
@@ -101,11 +102,21 @@ app.post('/api/contributions', protect, (req, res, next) => {
 
     if (req.files && req.files.length > 0) {
       const metadata = fileMetadata ? JSON.parse(fileMetadata) : [];
-      processedFiles = req.files.map((file, index) => ({
-        originalName: file.originalname,
-        filename: file.filename,
-        path: file.path,
-        description: metadata[index]?.name || file.originalname
+      processedFiles = await Promise.all(req.files.map(async (file, index) => {
+        const fileBuffer = await fs.promises.readFile(file.path);
+        const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+        const extension = path.extname(file.originalname).toLowerCase().replace('.', '');
+
+        return {
+          originalName: file.originalname,
+          filename: file.filename,
+          path: file.path,
+          description: metadata[index]?.name || file.originalname,
+          size: file.size,
+          extension: extension,
+          mimetype: file.mimetype,
+          hash: hash
+        };
       }));
     }
 
@@ -189,7 +200,7 @@ app.get('/admin/contributions/pending', protectAdmin, async (req, res) => {
   }
 });
 
- /**
+/**
  * ADMIN: UPDATE CONTRIBUTION STATUS
  */
 app.put('/admin/contributions/:id/status', protectAdmin, async (req, res) => {
@@ -232,6 +243,3 @@ app.put('/admin/contributions/:id/status', protectAdmin, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
-
-
-
