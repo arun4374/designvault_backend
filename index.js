@@ -1,10 +1,16 @@
 const express = require('express');
 const cors = require('cors');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const connectDB = require('./db');
-const User = require('./User');
+const User = require('./Scheme_Model/User');
 const authController = require('./authController');
+const SystemDesignContribution = require('./Scheme_Model/SystemDesignContribution');
+const DSAContribution = require('./Scheme_Model/DSAContribution');
+const COutputContribution = require('./Scheme_Model/COutputContribution');
 const { protect, protectAdmin } = require('./authMiddleware');
 
 const app = express();
@@ -13,6 +19,24 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Multer Configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = 'uploads/';
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir);
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + '-' + file.originalname);
+  }
+});
+
+const upload = multer({ storage });
 
 
 // Connect DB
@@ -38,6 +62,61 @@ app.get('/auth/google/callback', authController.handleGoogleCallback);
 app.post('/api/users/role', protect, (req, res) => {
   // req.user is populated by the protect middleware
   res.json({ role: req.user.role });
+});
+
+/**
+ * Route: POST /api/contributions
+ * Description: Submit a new contribution
+ */
+app.post('/api/contributions', protect, upload.array('files'), async (req, res) => {
+  try {
+    const { type, fileMetadata, ...data } = req.body;
+    const userId = req.user._id;
+
+    // Common fields
+    const commonData = {
+      ...data,
+      userId,
+      authorName: req.user.name || data.authorName,
+      status: 'pending'
+    };
+
+    let newContribution;
+    let processedFiles = [];
+
+    if (req.files && req.files.length > 0) {
+      const metadata = fileMetadata ? JSON.parse(fileMetadata) : [];
+      processedFiles = req.files.map((file, index) => ({
+        originalName: file.originalname,
+        filename: file.filename,
+        path: file.path,
+        description: metadata[index]?.name || file.originalname
+      }));
+    }
+
+    switch (type) {
+      case 'system-design':
+        newContribution = new SystemDesignContribution({
+          ...commonData,
+          files: processedFiles
+        });
+        break;
+      case 'dsa':
+        newContribution = new DSAContribution(commonData);
+        break;
+      case 'c-output':
+        newContribution = new COutputContribution(commonData);
+        break;
+      default:
+        return res.status(400).json({ success: false, message: 'Invalid contribution type' });
+    }
+
+    await newContribution.save();
+    res.status(201).json({ success: true, message: 'Contribution submitted successfully' });
+  } catch (error) {
+    console.error('Contribution error:', error);
+    res.status(500).json({ success: false, message: 'Failed to submit contribution', error: error.message });
+  }
 });
 
 /**
@@ -67,6 +146,71 @@ app.delete('/admin/users/:id', protectAdmin, async (req, res) => {
     res.json({ message: 'User deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error deleting user' });
+  }
+});
+
+/**
+ * ADMIN: GET PENDING CONTRIBUTIONS
+ */
+app.get('/admin/contributions/pending', protectAdmin, async (req, res) => {
+  try {
+    const systemDesign = await SystemDesignContribution.find({ status: 'pending' }).sort({ createdAt: -1 }).lean();
+    const dsa = await DSAContribution.find({ status: 'pending' }).sort({ createdAt: -1 }).lean();
+    const cOutput = await COutputContribution.find({ status: 'pending' }).sort({ createdAt: -1 }).lean();
+
+    const allPending = [
+      ...systemDesign.map(c => ({ ...c, type: 'system-design' })),
+      ...dsa.map(c => ({ ...c, type: 'dsa' })),
+      ...cOutput.map(c => ({ ...c, type: 'c-output' }))
+    ];
+
+    // Sort combined results by date
+    allPending.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.json(allPending);
+  } catch (error) {
+    console.error('Error fetching pending contributions:', error);
+    res.status(500).json({ message: 'Server error fetching contributions' });
+  }
+});
+
+/**
+ * ADMIN: UPDATE CONTRIBUTION STATUS
+ */
+app.put('/admin/contributions/:id/status', protectAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, type } = req.body;
+
+    if (!['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status. Must be approved or rejected.' });
+    }
+
+    let Model;
+    switch (type) {
+      case 'system-design':
+        Model = SystemDesignContribution;
+        break;
+      case 'dsa':
+        Model = DSAContribution;
+        break;
+      case 'c-output':
+        Model = COutputContribution;
+        break;
+      default:
+        return res.status(400).json({ message: 'Invalid contribution type' });
+    }
+
+    const updatedContribution = await Model.findByIdAndUpdate(id, { status }, { new: true });
+
+    if (!updatedContribution) {
+      return res.status(404).json({ message: 'Contribution not found' });
+    }
+
+    res.json({ success: true, message: `Contribution ${status}`, data: updatedContribution });
+  } catch (error) {
+    console.error('Error updating contribution status:', error);
+    res.status(500).json({ message: 'Server error updating contribution' });
   }
 });
 
