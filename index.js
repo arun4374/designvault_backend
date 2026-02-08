@@ -189,7 +189,7 @@ app.get('/admin/contributions/pending', protectAdmin, async (req, res) => {
   }
 });
 
-d /**
+ /**
  * ADMIN: UPDATE CONTRIBUTION STATUS
  */
 app.put('/admin/contributions/:id/status', protectAdmin, async (req, res) => {
@@ -232,5 +232,6 @@ app.put('/admin/contributions/:id/status', protectAdmin, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
 
 
