@@ -8,6 +8,10 @@ const protect = async (req, res, next) => {
       userId = String(req.body.userId || req.body.googleId).trim();
     }
 
+    if (!userId && req.query && (req.query.userId || req.query.googleId)) {
+      userId = String(req.query.userId || req.query.googleId).trim();
+    }
+
     if (!userId) {
       console.warn('Auth Middleware: x-user-id header missing. Received headers:', req.headers);
       return res.status(401).json({ message: 'Not authorized, no user ID provided' });
