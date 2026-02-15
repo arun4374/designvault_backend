@@ -2,7 +2,11 @@ const User = require('./User');
 
 const protect = async (req, res, next) => {
   try {
-    const userId = req.headers['x-user-id']?.trim();
+    let userId = req.headers['x-user-id']?.trim();
+
+    if (!userId && req.body && (req.body.userId || req.body.googleId)) {
+      userId = String(req.body.userId || req.body.googleId).trim();
+    }
 
     if (!userId) {
       console.warn('Auth Middleware: x-user-id header missing. Received headers:', req.headers);
