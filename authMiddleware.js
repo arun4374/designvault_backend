@@ -2,16 +2,26 @@ const User = require('./User');
 
 const protect = async (req, res, next) => {
   try {
-    const userId = req.headers['x-user-id'];
+    const userId = req.headers['x-user-id']?.trim();
 
     if (!userId) {
       console.warn('Auth Middleware: x-user-id header missing. Received headers:', req.headers);
       return res.status(401).json({ message: 'Not authorized, no user ID provided' });
     }
 
-    const user = await User.findById(userId);
+    let user;
+    // Check if userId is a valid ObjectId hex string to avoid CastError
+    if (userId.match(/^[0-9a-fA-F]{24}$/)) {
+      user = await User.findById(userId);
+    }
+
+    // If not found by ID (or invalid ID format), try finding by googleId
+    if (!user) {
+      user = await User.findOne({ googleId: userId });
+    }
 
     if (!user) {
+      console.warn(`Auth Middleware: User not found for ID: ${userId}`);
       return res.status(401).json({ message: 'Not authorized, user not found' });
     }
 
@@ -27,7 +37,7 @@ const protectAdmin = async (req, res, next) => {
   try {
     // 1. Get the user ID from the headers.
     // NOTE: In a production app, you should verify a secure token (like JWT) here instead of a raw user ID.
-    const userId = req.headers['x-user-id'];
+    const userId = req.headers['x-user-id']?.trim();
 
     if (!userId) {
       console.warn('Admin Auth Middleware: x-user-id header missing. Received headers:', req.headers);
@@ -35,9 +45,19 @@ const protectAdmin = async (req, res, next) => {
     }
 
     // 2. Find the user in the database
-    const user = await User.findById(userId);
+    let user;
+    // Check if userId is a valid ObjectId hex string
+    if (userId.match(/^[0-9a-fA-F]{24}$/)) {
+      user = await User.findById(userId);
+    }
+
+    // If not found by ID, try finding by googleId
+    if (!user) {
+      user = await User.findOne({ googleId: userId });
+    }
 
     if (!user) {
+      console.warn(`Admin Auth Middleware: User not found for ID: ${userId}`);
       return res.status(401).json({ message: 'Not authorized, user not found' });
     }
 
