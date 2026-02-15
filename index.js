@@ -90,7 +90,8 @@ app.post('/api/contributions', (req, res, next) => {
     // Everything went fine.
     console.log('--- Contribution Request Debug ---');
     console.log('Headers x-user-id:', req.headers['x-user-id']);
-    console.log('Body:', JSON.stringify(req.body, null, 2));
+    console.log('Query:', req.query);
+    console.log('Body Keys:', Object.keys(req.body));
     console.log('Files count:', req.files ? req.files.length : 0);
     protect(req, res, next);
   });
