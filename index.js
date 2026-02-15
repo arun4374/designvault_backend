@@ -74,7 +74,7 @@ app.post('/api/users/role', protect, (req, res) => {
  * Route: POST /api/contributions
  * Description: Submit a new contribution
  */
-app.post('/api/contributions', protect, (req, res, next) => {
+app.post('/api/contributions', (req, res, next) => {
   upload.array('files')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       // A Multer error occurred when uploading.
@@ -84,10 +84,16 @@ app.post('/api/contributions', protect, (req, res, next) => {
       return res.status(500).json({ success: false, message: `Unknown upload error: ${err.message}` });
     }
     // Everything went fine.
-    next();
+    console.log('--- Contribution Request Debug ---');
+    console.log('Headers x-user-id:', req.headers['x-user-id']);
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+    console.log('Files count:', req.files ? req.files.length : 0);
+    protect(req, res, next);
   });
 }, async (req, res) => {
   try {
+    console.log('--- Contribution Handler Start ---');
+    console.log('User:', req.user);
     const { type, fileMetadata, ...data } = req.body;
     const userId = req.user._id;
 
@@ -245,4 +251,3 @@ app.put('/admin/contributions/:id/status', protectAdmin, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
-
