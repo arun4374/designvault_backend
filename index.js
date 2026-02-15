@@ -18,7 +18,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: true, // Allow all origins or set to process.env.FRONTEND_URL
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id']
+}));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
