@@ -17,7 +17,7 @@ const getUserFromRequest = async (req) => {
   if (/^[0-9a-fA-F]{24}$/.test(userId)) {
     user = await User.findById(userId);
   }
-
+ console.log(userId);
   // Else Google ID
   if (!user) {
     user = await User.findOne({
@@ -38,7 +38,7 @@ const protect = async (req, res, next) => {
   try {
 
     const user = await getUserFromRequest(req);
-
+ console.log(user);
     if (!user) {
       return res.status(401).json({
         message: 'Authentication required'
@@ -114,3 +114,4 @@ module.exports = {
   protect,
   protectAdmin
 };
+
