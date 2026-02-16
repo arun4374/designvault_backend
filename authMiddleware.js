@@ -37,7 +37,9 @@ const protect = async (req, res, next) => {
 
 
   try {
-  console.log("Auth Header x-user-id:", req.headers['x-user-id']);
+  console.log("HEADERS:", req.headers);
+console.log("X-USER-ID:", req.headers['x-user-id']);
+
 
     const user = await getUserFromRequest(req);
  console.log(user);
@@ -116,6 +118,7 @@ module.exports = {
   protect,
   protectAdmin
 };
+
 
 
 
