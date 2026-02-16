@@ -11,6 +11,7 @@
     "dotenv": "^16.6.1",
     "express": "^4.22.1",
     "crypto": "^1.0.1",
+    "express-rate-limit": "^8.2.1",
     "google-auth-library": "^9.15.1",
     "mongoose": "^9.1.5",
     "multer": "^2.0.2",
@@ -20,4 +21,5 @@
     "nodemon": "^3.0.1"
   }
 }
+
 
