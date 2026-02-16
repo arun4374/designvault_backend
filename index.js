@@ -500,6 +500,40 @@ app.use((err, req, res, next) => {
   next();
 });
 
+app.use(
+  cors({
+    origin: (origin, callback) => {
+
+      const allowedOrigins = [
+        'https://algoflow-sand.vercel.app',
+        'http://localhost:5173'
+      ];
+
+      // Allow requests with no origin (mobile apps, postman)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(
+          new Error('Not allowed by CORS')
+        );
+      }
+    },
+
+    credentials: true,
+
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-user-id'
+    ]
+  })
+);
+
+
 /*************************************************
  * SERVER
  *************************************************/
@@ -508,3 +542,4 @@ app.listen(PORT, () => {
 
   console.log(`🚀 Server running on ${PORT}`);
 });
+
