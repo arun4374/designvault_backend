@@ -1,26 +1,80 @@
 const mongoose = require('mongoose');
 
+/*************************************************
+ * USER SCHEMA
+ *************************************************/
+
 const UserSchema = new mongoose.Schema({
+
   googleId: {
     type: String,
+    required: true,
     unique: true,
-    required: true
+    index: true
   },
-  name: String,
-  email: String,
+
+  name: {
+    type: String,
+    trim: true,
+    maxlength: 100
+  },
+
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true,
+    index: true
+  },
+
   avatar: String,
 
   role: {
     type: String,
-    default: 'USER' // USER | ADMIN | AUTHOR
+    enum: ['USER', 'ADMIN', 'AUTHOR'],
+    default: 'USER',
+    index: true
   },
 
-  createdAt: {
-    type: Date,
-    default: Date.now
+  bio: {
+    type: String,
+    maxlength: 300
   },
 
-  lastLoginAt: Date
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+
+  lastLoginAt: {
+    type: Date
+  },
+
+  /******** PLATFORM METRICS ********/
+
+  totalContributions: {
+    type: Number,
+    default: 0
+  },
+
+  totalLikesReceived: {
+    type: Number,
+    default: 0
+  }
+
+}, {
+  timestamps: true
 });
+
+
+/*************************************************
+ * INDEXES
+ *************************************************/
+
+UserSchema.index({ createdAt: -1 });
+UserSchema.index({ email: 1 });
+UserSchema.index({ role: 1 });
+
 
 module.exports = mongoose.model('User', UserSchema);
