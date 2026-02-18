@@ -62,10 +62,13 @@ app.use(
     credentials: true,
     allowedHeaders: [
       'Content-Type',
-      'Authorization'
+      'Authorization',
+      'x-user-id'
     ]
   })
 );
+
+app.options('*', cors());
 
 /*************************************************
  * BODY PARSER
@@ -542,4 +545,5 @@ app.listen(PORT, () => {
 
   console.log(`🚀 Server running on ${PORT}`);
 });
+
 
