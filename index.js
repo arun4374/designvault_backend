@@ -197,6 +197,23 @@ app.post(
  * CONTRIBUTION ROUTE
  *************************************************/
 
+// Get Approved C Output Contributions
+app.get('/api/c-output', async (req, res) => {
+  try {
+    const contributions = await COutputContribution.find({ status: 'approved' })
+      .sort({ createdAt: -1 })
+      .select('-__v')
+      .lean();
+
+    res.json(contributions);
+  } catch (err) {
+    console.error('Error fetching C Output contributions:', err);
+    res.status(500).json({
+      message: 'Failed to fetch contributions'
+    });
+  }
+});
+
 app.post(
   '/api/contributions',
 
