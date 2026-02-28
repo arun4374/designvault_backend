@@ -27,6 +27,9 @@ const DSAContribution =
 const COutputContribution =
   require('./Schema_Model/COutputContribution');
 
+const Notification =
+  require('./Schema_Model/Notification');
+
 const {
   protect,
   protectAdmin
@@ -240,6 +243,56 @@ app.put(
   }
 );
 
+// Get Notifications
+app.get('/api/notifications', protect, async (req, res) => {
+  try {
+    const notifications = await Notification.find({ recipient: req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(20);
+    res.json(notifications);
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    res.status(500).json({ message: 'Error fetching notifications' });
+  }
+});
+
+// Mark all notifications as read
+app.put('/api/notifications/read-all', protect, async (req, res) => {
+  try {
+    await Notification.updateMany(
+      { recipient: req.user._id, read: false },
+      { $set: { read: true } }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating notifications' });
+  }
+});
+
+// Mark single notification as read
+app.put('/api/notifications/:id/read', protect, async (req, res) => {
+  try {
+    const notification = await Notification.findOneAndUpdate(
+      { _id: req.params.id, recipient: req.user._id },
+      { $set: { read: true } },
+      { new: true }
+    );
+    res.json(notification);
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating notification' });
+  }
+});
+
+// Delete Notification
+app.delete('/api/notifications/:id', protect, async (req, res) => {
+  try {
+    await Notification.findOneAndDelete({ _id: req.params.id, recipient: req.user._id });
+    res.json({ message: 'Notification deleted' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting notification' });
+  }
+});
+
 /*************************************************
  * CONTRIBUTION ROUTE
  *************************************************/
@@ -390,6 +443,31 @@ app.post(
       }
 
       await newContribution.save();
+
+      // Create Notifications
+      try {
+        // Notify the author
+        await Notification.create({
+          recipient: userId,
+          title: 'Submission Received',
+          message: `Your contribution "${commonData.title}" has been submitted successfully.`,
+          type: 'success'
+        });
+
+        // Notify admins
+        const admins = await User.find({ role: 'ADMIN' });
+        if (admins.length > 0) {
+          const adminNotifs = admins.map(admin => ({
+            recipient: admin._id,
+            title: 'New Contribution',
+            message: `${req.user.name} submitted a new ${type} contribution: "${commonData.title}".`,
+            type: 'info'
+          }));
+          await Notification.insertMany(adminNotifs);
+        }
+      } catch (notifyError) {
+        console.error('Notification error:', notifyError);
+      }
 
       res.status(201).json({
 
