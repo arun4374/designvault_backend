@@ -70,6 +70,7 @@ app.use(
 
 app.options('*', cors());
 
+
 /*************************************************
  * BODY PARSER
  *************************************************/
@@ -221,6 +222,12 @@ app.post(
 
       const userId = req.user._id;
 
+      // Generate unique slug
+      const slugBase = data.title
+        ? data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+        : 'post';
+      const slug = `${slugBase}-${crypto.randomBytes(4).toString('hex')}`;
+
       const commonData = {
 
         ...data,
@@ -229,7 +236,9 @@ app.post(
 
         authorName: req.user.name,
 
-        status: 'pending'
+        status: 'pending',
+
+        slug
       };
 
       /******** PROCESS FILES ********/
@@ -322,7 +331,9 @@ app.post(
 
         success: true,
 
-        message: 'Code uploaded successfully'
+        message: 'Code uploaded successfully',
+
+        slug: newContribution.slug
       });
 
     } catch (err) {
@@ -545,5 +556,3 @@ app.listen(PORT, () => {
 
   console.log(`🚀 Server running on ${PORT}`);
 });
-
-
