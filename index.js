@@ -193,6 +193,53 @@ app.post(
   }
 );
 
+// Get User Profile
+app.get(
+  '/api/users/profile',
+  protect,
+  async (req, res) => {
+    try {
+      const user = await User.findById(req.user._id).select('-password');
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      res.json(user);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      res.status(500).json({ message: 'Server Error' });
+    }
+  }
+);
+
+// Update User Profile
+app.put(
+  '/api/users/profile',
+  protect,
+  async (req, res) => {
+    try {
+      const user = await User.findById(req.user._id);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      if (req.body.name) user.name = req.body.name;
+      if (req.body.avatar) user.avatar = req.body.avatar;
+      if (req.body.email) user.email = req.body.email;
+
+      const updatedUser = await user.save();
+
+      // Return the updated user object (excluding password/sensitive fields if needed)
+      const userResponse = updatedUser.toObject();
+      delete userResponse.password;
+      
+      res.json(userResponse);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      res.status(500).json({ message: 'Server Error' });
+    }
+  }
+);
+
 /*************************************************
  * CONTRIBUTION ROUTE
  *************************************************/
