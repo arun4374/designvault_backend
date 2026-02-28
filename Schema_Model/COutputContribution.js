@@ -15,6 +15,8 @@ const COutputContributionSchema = new mongoose.Schema({
 
   slug: {
     type: String,
+    required: true,
+    unique: true,
     lowercase: true,
     trim: true
   },
@@ -128,4 +130,3 @@ module.exports = mongoose.model(
   'COutputContribution',
   COutputContributionSchema
 );
-
