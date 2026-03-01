@@ -1,5 +1,6 @@
 const { OAuth2Client } = require('google-auth-library');
 const User = require('./User');
+const Transaction = require('./Schema_Model/Transaction');
 require('dotenv').config();
 
 const PORT = process.env.PORT || 3000;
@@ -63,8 +64,27 @@ exports.handleGoogleCallback = async (req, res) => {
 
     // 3 Check user already exits
 
+    const now = new Date();
+
     if (user) {
-      user.lastLoginAt = new Date();
+      // Daily Login Bonus (+1)
+      const lastLogin = user.lastLoginAt || new Date(0);
+      const isSameDay =
+        lastLogin.getDate() === now.getDate() &&
+        lastLogin.getMonth() === now.getMonth() &&
+        lastLogin.getFullYear() === now.getFullYear();
+
+      if (!isSameDay) {
+        user.credits = (typeof user.credits === 'number' ? user.credits : 100) + 1;
+        await Transaction.create({
+          userId: user._id,
+          amount: 1,
+          type: 'DAILY_LOGIN',
+          description: 'Daily login bonus'
+        });
+      }
+
+      user.lastLoginAt = now;
       await user.save();
     } else {
       user = await User.create({
@@ -73,8 +93,24 @@ exports.handleGoogleCallback = async (req, res) => {
         email,
         avatar: picture,
         role: 'USER',
-        lastLoginAt: new Date()
+        credits: 101, // 100 Signup + 1 Daily Login
+        lastLoginAt: now
       });
+
+      await Transaction.create([
+        {
+          userId: user._id,
+          amount: 100,
+          type: 'SIGNUP_BONUS',
+          description: 'Welcome bonus'
+        },
+        {
+          userId: user._id,
+          amount: 1,
+          type: 'DAILY_LOGIN',
+          description: 'First daily login'
+        }
+      ]);
     }
 
     // 4 ALWAYS SEND DATA FROM DATABASE
@@ -83,7 +119,8 @@ exports.handleGoogleCallback = async (req, res) => {
       name: user.name,
       email: user.email,
       avatar: user.avatar,
-      role: user.role
+      role: user.role,
+      credits: user.credits
     }));
 
     const separator = returnUrl.includes('?') ? '&' : '?';
