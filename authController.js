@@ -74,7 +74,7 @@ exports.handleGoogleCallback = async (req, res) => {
         lastLogin.getMonth() === now.getMonth() &&
         lastLogin.getFullYear() === now.getFullYear();
 
-      if (!isSameDay) {
+      if (!isSameDay && user.role !== 'ADMIN') {
         user.credits = (typeof user.credits === 'number' ? user.credits : 100) + 1;
         await Transaction.create({
           userId: user._id,
