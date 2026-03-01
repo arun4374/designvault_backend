@@ -542,6 +542,56 @@ app.delete(
   }
 );
 
+// Get Contributions by Status (Filter)
+app.get(
+  '/admin/contributions',
+  protectAdmin,
+
+  async (req, res) => {
+    const status = req.query.status || 'pending';
+    const type = req.query.type || 'all';
+
+    let system = [];
+    let dsa = [];
+    let coutput = [];
+
+    if (type === 'all' || type === 'system-design') {
+      system = await SystemDesignContribution.find({ status }).lean();
+    }
+
+    if (type === 'all' || type === 'dsa') {
+      dsa = await DSAContribution.find({ status }).lean();
+    }
+
+    if (type === 'all' || type === 'c-output') {
+      coutput = await COutputContribution.find({ status }).lean();
+    }
+
+    const all = [
+      ...system.map(c => ({
+        ...c,
+        type: 'system-design'
+      })),
+      ...dsa.map(c => ({
+        ...c,
+        type: 'dsa'
+      })),
+      ...coutput.map(c => ({
+        ...c,
+        type: 'c-output'
+      }))
+    ];
+
+    all.sort(
+      (a, b) =>
+        new Date(b.createdAt) -
+        new Date(a.createdAt)
+    );
+
+    res.json(all);
+  }
+);
+
 // Get Pending Contributions
 app.get(
   '/admin/contributions/pending',
