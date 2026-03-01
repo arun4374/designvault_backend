@@ -61,6 +61,14 @@ const UserSchema = new mongoose.Schema({
   totalLikesReceived: {
     type: Number,
     default: 0
+  },
+
+  /******** SAAS CREDITS ********/
+
+  credits: {
+    type: Number,
+    default: 100, // Professional starting balance
+    min: 0
   }
 
 }, {
