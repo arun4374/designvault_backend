@@ -644,16 +644,29 @@ app.put(
 
     // Add credits if approved (+2)
     if (status === 'approved') {
-      await User.findByIdAndUpdate(
-        updated.userId,
-        { $inc: { credits: 2 } }
-      );
+      const author = await User.findById(updated.userId);
 
-      await Transaction.create({
-        userId: updated.userId,
-        amount: 2,
-        type: 'CONTRIBUTION_APPROVED',
-        description: `Approved contribution: ${updated.title || 'Untitled'}`
+      if (author && author.role !== 'ADMIN') {
+        await User.findByIdAndUpdate(
+          updated.userId,
+          { $inc: { credits: 2 } }
+        );
+
+        await Transaction.create({
+          userId: updated.userId,
+          amount: 2,
+          type: 'CONTRIBUTION_APPROVED',
+          description: `Approved contribution: ${updated.title || 'Untitled'}`
+        });
+      }
+
+      await Notification.create({
+        recipient: updated.userId,
+        title: 'Contribution Approved',
+        message: (author && author.role === 'ADMIN')
+          ? `Your contribution "${updated.title}" has been approved.`
+          : `Your contribution "${updated.title}" has been approved. You earned 2 credits!`,
+        type: 'success'
       });
     }
 
