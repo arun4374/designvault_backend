@@ -33,6 +33,9 @@ const Notification =
 const Transaction =
   require('./Schema_Model/Transaction');
 
+const Review =
+  require('./Schema_Model/Review');
+
 const {
   protect,
   protectAdmin
@@ -306,6 +309,48 @@ app.get('/api/transactions', protect, async (req, res) => {
   } catch (error) {
     console.error('Error fetching transactions:', error);
     res.status(500).json({ message: 'Error fetching transactions' });
+  }
+});
+
+/*************************************************
+ * REVIEW ROUTES
+ *************************************************/
+
+// Get Reviews for a Product
+app.get('/api/products/:id/reviews', async (req, res) => {
+  try {
+    const reviews = await Review.find({ productId: req.params.id })
+      .sort({ createdAt: -1 });
+    res.json(reviews);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching reviews' });
+  }
+});
+
+// Add Review
+app.post('/api/products/:id/reviews', protect, async (req, res) => {
+  try {
+    const { rating, comment } = req.body;
+    const productId = parseInt(req.params.id);
+
+    // Check if already reviewed
+    const existing = await Review.findOne({ productId, userId: req.user._id });
+    if (existing) {
+      return res.status(400).json({ message: 'You have already reviewed this product' });
+    }
+
+    const review = await Review.create({
+      productId,
+      userId: req.user._id,
+      userName: req.user.name,
+      userAvatar: req.user.avatar,
+      rating,
+      comment
+    });
+
+    res.status(201).json(review);
+  } catch (error) {
+    res.status(500).json({ message: 'Error posting review' });
   }
 });
 
