@@ -30,6 +30,9 @@ const COutputContribution =
 const Notification =
   require('./Schema_Model/Notification');
 
+const Transaction =
+  require('./Schema_Model/Transaction');
+
 const {
   protect,
   protectAdmin
@@ -290,6 +293,19 @@ app.delete('/api/notifications/:id', protect, async (req, res) => {
     res.json({ message: 'Notification deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting notification' });
+  }
+});
+
+// Get User Transactions
+app.get('/api/transactions', protect, async (req, res) => {
+  try {
+    const transactions = await Transaction.find({ userId: req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(50);
+    res.json(transactions);
+  } catch (error) {
+    console.error('Error fetching transactions:', error);
+    res.status(500).json({ message: 'Error fetching transactions' });
   }
 });
 
@@ -624,6 +640,21 @@ app.put(
       return res
         .status(404)
         .json({ message: 'Not found' });
+    }
+
+    // Add credits if approved (+2)
+    if (status === 'approved') {
+      await User.findByIdAndUpdate(
+        updated.userId,
+        { $inc: { credits: 2 } }
+      );
+
+      await Transaction.create({
+        userId: updated.userId,
+        amount: 2,
+        type: 'CONTRIBUTION_APPROVED',
+        description: `Approved contribution: ${updated.title || 'Untitled'}`
+      });
     }
 
     res.json({
