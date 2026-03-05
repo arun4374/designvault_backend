@@ -36,6 +36,8 @@ const Transaction =
 const Review =
   require('./Schema_Model/Review');
 
+const Article = require('./Schema_Model/Article');
+
 const {
   protect,
   protectAdmin
@@ -169,6 +171,41 @@ const upload = multer({
   },
 
   fileFilter
+});
+
+
+/*************************************************
+ * MULTER CONFIG (ARTICLES)
+ *************************************************/
+const articleUploadDir = path.join(__dirname, 'uploads', 'articles');
+if (!fs.existsSync(articleUploadDir)) {
+  fs.mkdirSync(articleUploadDir, { recursive: true });
+}
+
+const articleStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, articleUploadDir);
+  },
+  filename: (req, file, cb) => {
+    const unique = Date.now() + '-' + crypto.randomBytes(6).toString('hex');
+    cb(null, unique + path.extname(file.originalname));
+  }
+});
+
+const articleFileFilter = (req, file, cb) => {
+  const allowedExts = ['.md', '.markdown', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (allowedExts.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type for articles'), false);
+  }
+};
+
+const articleUpload = multer({
+  storage: articleStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: articleFileFilter
 });
 
 
@@ -771,6 +808,150 @@ app.put(
     });
   }
 );
+
+// Create Article
+app.post(
+  '/admin/articles',
+  protectAdmin,
+  articleUpload.fields([
+    { name: 'mdFile', maxCount: 1 },
+    { name: 'coverImage', maxCount: 1 }
+  ]),
+  async (req, res) => {
+    try {
+      if (!req.files || !req.files.mdFile || !req.files.coverImage) {
+        return res.status(400).json({ message: 'Markdown file and Cover Image are required' });
+      }
+
+      const { title, slug, description, category, tags, status } = req.body;
+
+      const tagsArray = tags ? tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
+
+      // Read markdown content
+      const mdFilePath = req.files.mdFile[0].path;
+      const content = await fs.promises.readFile(mdFilePath, 'utf8');
+      await fs.promises.unlink(mdFilePath); // Delete file after reading
+
+      // Store relative path for cover image
+      const coverImagePath = 'uploads/articles/' + req.files.coverImage[0].filename;
+
+      const newArticle = new Article({
+        title,
+        slug,
+        description,
+        category,
+        tags: tagsArray,
+        status: status || 'draft',
+        content,
+        coverImage: coverImagePath,
+        author: req.user._id
+      });
+
+      await newArticle.save();
+
+      res.status(201).json({
+        success: true,
+        message: 'Article created successfully',
+        article: newArticle
+      });
+
+    } catch (error) {
+      console.error('Error creating article:', error);
+      res.status(500).json({ message: 'Server Error', error: error.message });
+    }
+  }
+);
+
+// Update Article
+app.put(
+  '/admin/articles/:id',
+  protectAdmin,
+  articleUpload.fields([
+    { name: 'mdFile', maxCount: 1 },
+    { name: 'coverImage', maxCount: 1 }
+  ]),
+  async (req, res) => {
+    try {
+      const article = await Article.findById(req.params.id);
+
+      if (!article) {
+        return res.status(404).json({ message: 'Article not found' });
+      }
+
+      const { title, slug, description, category, tags, status } = req.body;
+
+      if (title) article.title = title;
+      if (slug) article.slug = slug;
+      if (description !== undefined) article.description = description;
+      if (category) article.category = category;
+      if (status) article.status = status;
+
+      if (typeof tags !== 'undefined') {
+        article.tags = tags ? tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
+      }
+
+      if (req.files && req.files.mdFile) {
+        const mdFilePath = req.files.mdFile[0].path;
+        const content = await fs.promises.readFile(mdFilePath, 'utf8');
+        await fs.promises.unlink(mdFilePath); // Delete file after reading
+        article.content = content;
+      }
+
+      if (req.files && req.files.coverImage) {
+        article.coverImage = 'uploads/articles/' + req.files.coverImage[0].filename;
+      }
+
+      await article.save();
+
+      res.json({
+        success: true,
+        message: 'Article updated successfully',
+        article
+      });
+
+    } catch (error) {
+      console.error('Error updating article:', error);
+      res.status(500).json({ message: 'Server Error', error: error.message });
+    }
+  }
+);
+
+/*************************************************
+ * ARTICLE ROUTES
+ *************************************************/
+
+// Get Published Articles
+app.get('/api/articles', async (req, res) => {
+  try {
+    const articles = await Article.find({ status: 'published' })
+      .populate('author', 'name avatar')
+      .sort({ createdAt: -1 });
+    res.json(articles);
+  } catch (error) {
+    console.error('Error fetching articles:', error);
+    res.status(500).json({ message: 'Error fetching articles' });
+  }
+});
+
+// Get Single Article
+app.get('/api/articles/:slug', async (req, res) => {
+  try {
+    const article = await Article.findOne({ slug: req.params.slug, status: 'published' })
+      .populate('author', 'name avatar');
+
+    if (!article) {
+      return res.status(404).json({ message: 'Article not found' });
+    }
+
+    // Increment views
+    await Article.findByIdAndUpdate(article._id, { $inc: { views: 1 } });
+
+    res.json(article);
+  } catch (error) {
+    console.error('Error fetching article:', error);
+    res.status(500).json({ message: 'Error fetching article' });
+  }
+});
 
 /*************************************************
  * ERROR HANDLER
