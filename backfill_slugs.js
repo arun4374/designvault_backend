@@ -2,19 +2,16 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 
-// Import Models
 const SystemDesignContribution = require('./Schema_Model/SystemDesignContribution');
 const DSAContribution = require('./Schema_Model/DSAContribution');
 const COutputContribution = require('./Schema_Model/COutputContribution');
 
-// Connect to DB
 const connectDB = async () => {
   try {
-    // Ensure you have MONGO_URI in your .env file
     await mongoose.connect(process.env.MONGO_URI);
     console.log('✅ MongoDB connected');
   } catch (err) {
-    console.error('❌ MongoDB connection failed', err);
+    console.error('❌ MongoDB connection failed:', err);
     process.exit(1);
   }
 };
@@ -27,37 +24,48 @@ const generateSlug = (title) => {
 };
 
 const backfillCollection = async (Model, name) => {
-  console.log(`Checking ${name}...`);
-  
-  // Find documents where slug is missing, null, or empty
-  const docs = await Model.find({
-    $or: [
-      { slug: { $exists: false } },
-      { slug: null },
-      { slug: '' }
-    ]
-  });
+  console.log(`\nChecking ${name}...`);
 
-  if (docs.length === 0) {
-    console.log(`No documents to backfill in ${name}.`);
-    return;
+  // FIX: Wrapped in try/catch so one failing collection
+  //      doesn't crash the whole script mid-run.
+  try {
+    const docs = await Model.find({
+      $or: [
+        { slug: { $exists: false } },
+        { slug: null },
+        { slug: '' }
+      ]
+    }).lean(); // .lean() for faster reads — we only need _id and title
+
+    if (docs.length === 0) {
+      console.log(`  ✅ No documents to backfill in ${name}.`);
+      return;
+    }
+
+    console.log(`  Found ${docs.length} documents missing slugs. Updating...`);
+
+    // FIX: Use bulkWrite instead of a sequential for loop with await.
+    //      The old approach sent one DB request per document —
+    //      bulkWrite sends them all in a single round trip,
+    //      which is dramatically faster on large collections.
+    const operations = docs.map((doc) => ({
+      updateOne: {
+        filter: { _id: doc._id },
+        update: { $set: { slug: generateSlug(doc.title) } }
+      }
+    }));
+
+    const result = await Model.bulkWrite(operations, { ordered: false });
+    // ordered:false means all ops run even if one fails,
+    // giving us maximum coverage in a migration context.
+
+    console.log(`  ✅ Finished ${name}: ${result.modifiedCount} updated.`);
+
+  } catch (err) {
+    // FIX: Log and continue instead of crashing — lets other
+    //      collections still get processed.
+    console.error(`  ❌ Error backfilling ${name}:`, err.message);
   }
-
-  console.log(`Found ${docs.length} documents in ${name} missing slugs. Updating...`);
-
-  let count = 0;
-  for (const doc of docs) {
-    const slug = generateSlug(doc.title);
-    
-    // Use updateOne to bypass schema validation during migration if needed
-    await Model.updateOne(
-      { _id: doc._id },
-      { $set: { slug: slug } }
-    );
-    count++;
-    process.stdout.write(`\rUpdated ${count}/${docs.length}`);
-  }
-  console.log(`\nFinished ${name}.\n`);
 };
 
 const run = async () => {
@@ -67,8 +75,15 @@ const run = async () => {
   await backfillCollection(DSAContribution, 'DSAContribution');
   await backfillCollection(COutputContribution, 'COutputContribution');
 
-  console.log('Backfill complete.');
-  process.exit(0);
+  console.log('\n✅ All backfills complete.');
+
+  // FIX: Always close the connection cleanly when done.
+  await mongoose.connection.close();
+  console.log('🔌 MongoDB connection closed.');
 };
 
-run();
+// FIX: Catch any unexpected top-level errors with a clear message.
+run().catch((err) => {
+  console.error('❌ Unexpected error:', err);
+  process.exit(1);
+});
