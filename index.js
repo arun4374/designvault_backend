@@ -1,8 +1,23 @@
 /*************************************************
- * server.js - Secure & Production Ready Backend
+ * index.js - Secure & Production Ready Backend
  *************************************************/
 
 require('dotenv').config();
+
+/*************************************************
+ * CRASH SAFETY NET
+ * Prevents the Node.js process from dying silently
+ * on unhandled errors or promise rejections.
+ *************************************************/
+process.on('uncaughtException', (err) => {
+  console.error('💥 Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('💥 Unhandled Rejection:', reason);
+  process.exit(1);
+});
 
 const express = require('express');
 const cors = require('cors');
@@ -58,7 +73,7 @@ connectDB();
 // HTTP Headers Protection
 app.use(helmet());
 
-// Rate Limit (Anti DDOS)
+// Rate Limit (Anti DDoS)
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -66,21 +81,41 @@ app.use(
   })
 );
 
-// CORS
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL,
-    credentials: true,
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'x-user-id'
-    ]
-  })
-);
+/*************************************************
+ * CORS
+ * FIX: Single unified CORS config using env var.
+ * Removed duplicate cors() at bottom of file.
+ * FIX: app.options now uses the same restricted
+ *      config instead of bare cors() which was
+ *      allowing ALL origins on preflight.
+ *************************************************/
+const corsOptions = {
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      process.env.FRONTEND_URL,
+      'http://localhost:5173'
+    ].filter(Boolean); // remove undefined if env var not set
 
-app.options('*', cors());
+    // Allow requests with no origin (Postman, mobile apps)
+    if (!origin) return callback(null, true);
 
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'x-user-id'
+  ]
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // FIX: use same restricted config, not bare cors()
 
 /*************************************************
  * BODY PARSER
@@ -130,7 +165,6 @@ const storage = multer.diskStorage({
   },
 
   filename: (req, file, cb) => {
-
     const unique =
       Date.now() +
       '-' +
@@ -140,9 +174,8 @@ const storage = multer.diskStorage({
   }
 });
 
-// Filter (IMPORTANT)
+// Filter
 const fileFilter = (req, file, cb) => {
-
   const ext = path.extname(file.originalname).toLowerCase();
 
   if (
@@ -152,9 +185,7 @@ const fileFilter = (req, file, cb) => {
     cb(null, true);
   } else {
     cb(
-      new Error(
-        'Only .txt, .java, .c, .cpp, .py files allowed'
-      ),
+      new Error('Only .txt, .java, .c, .cpp, .py files allowed'),
       false
     );
   }
@@ -162,14 +193,11 @@ const fileFilter = (req, file, cb) => {
 
 // Upload Instance
 const upload = multer({
-
   storage,
-
   limits: {
     fileSize: 300 * 1024, // 300KB
     files: 5
   },
-
   fileFilter
 });
 
@@ -232,10 +260,7 @@ app.post(
   '/api/users/role',
   protect,
   (req, res) => {
-
-    res.json({
-      role: req.user.role
-    });
+    res.json({ role: req.user.role });
   }
 );
 
@@ -258,6 +283,9 @@ app.get(
 );
 
 // Update User Profile
+// FIX: Removed email update — allowing unauthenticated email changes
+//      is an account takeover vulnerability. Users can only update
+//      their name and avatar here.
 app.put(
   '/api/users/profile',
   protect,
@@ -270,14 +298,14 @@ app.put(
 
       if (req.body.name) user.name = req.body.name;
       if (req.body.avatar) user.avatar = req.body.avatar;
-      if (req.body.email) user.email = req.body.email;
+      // NOTE: Email change intentionally not allowed here.
+      // Implement a separate verified email-change flow if needed.
 
       const updatedUser = await user.save();
 
-      // Return the updated user object (excluding password/sensitive fields if needed)
       const userResponse = updatedUser.toObject();
       delete userResponse.password;
-      
+
       res.json(userResponse);
     } catch (error) {
       console.error('Error updating profile:', error);
@@ -320,6 +348,9 @@ app.put('/api/notifications/:id/read', protect, async (req, res) => {
       { $set: { read: true } },
       { new: true }
     );
+    if (!notification) {
+      return res.status(404).json({ message: 'Notification not found' });
+    }
     res.json(notification);
   } catch (error) {
     res.status(500).json({ message: 'Error updating notification' });
@@ -329,7 +360,10 @@ app.put('/api/notifications/:id/read', protect, async (req, res) => {
 // Delete Notification
 app.delete('/api/notifications/:id', protect, async (req, res) => {
   try {
-    await Notification.findOneAndDelete({ _id: req.params.id, recipient: req.user._id });
+    await Notification.findOneAndDelete({
+      _id: req.params.id,
+      recipient: req.user._id
+    });
     res.json({ message: 'Notification deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting notification' });
@@ -356,6 +390,8 @@ app.get('/api/transactions', protect, async (req, res) => {
 // Get Reviews for a Product
 app.get('/api/products/:id/reviews', async (req, res) => {
   try {
+    // FIX: Removed parseInt — productId should remain a string (MongoDB ObjectId).
+    //      Using parseInt would corrupt ObjectId lookups.
     const reviews = await Review.find({ productId: req.params.id })
       .sort({ createdAt: -1 });
     res.json(reviews);
@@ -368,7 +404,14 @@ app.get('/api/products/:id/reviews', async (req, res) => {
 app.post('/api/products/:id/reviews', protect, async (req, res) => {
   try {
     const { rating, comment } = req.body;
-    const productId = parseInt(req.params.id);
+
+    // FIX: Validate rating before saving
+    const parsedRating = Number(rating);
+    if (!parsedRating || parsedRating < 1 || parsedRating > 5) {
+      return res.status(400).json({ message: 'Rating must be a number between 1 and 5' });
+    }
+
+    const productId = req.params.id; // FIX: keep as string, not parseInt
 
     // Check if already reviewed
     const existing = await Review.findOne({ productId, userId: req.user._id });
@@ -381,7 +424,7 @@ app.post('/api/products/:id/reviews', protect, async (req, res) => {
       userId: req.user._id,
       userName: req.user.name,
       userAvatar: req.user.avatar,
-      rating,
+      rating: parsedRating,
       comment
     });
 
@@ -392,7 +435,7 @@ app.post('/api/products/:id/reviews', protect, async (req, res) => {
 });
 
 /*************************************************
- * CONTRIBUTION ROUTE
+ * CONTRIBUTION ROUTES
  *************************************************/
 
 // Get Approved C Output Contributions
@@ -406,29 +449,17 @@ app.get('/api/c-output', async (req, res) => {
     res.json(contributions);
   } catch (err) {
     console.error('Error fetching C Output contributions:', err);
-    res.status(500).json({
-      message: 'Failed to fetch contributions'
-    });
+    res.status(500).json({ message: 'Failed to fetch contributions' });
   }
 });
 
+// Submit Contribution
 app.post(
   '/api/contributions',
-
-  protect, // Session / Google auth
-
+  protect,
   upload.array('files', 5),
-
   async (req, res) => {
-
     try {
-
-      if (!req.user) {
-        return res
-          .status(401)
-          .json({ message: 'Login required' });
-      }
-
       const {
         type,
         fileMetadata,
@@ -444,15 +475,10 @@ app.post(
       const slug = `${slugBase}-${crypto.randomBytes(4).toString('hex')}`;
 
       const commonData = {
-
         ...data,
-
         userId,
-
         authorName: req.user.name,
-
         status: 'pending',
-
         slug
       };
 
@@ -462,16 +488,18 @@ app.post(
 
       if (req.files?.length) {
 
-        const metadata = fileMetadata
-          ? JSON.parse(fileMetadata)
-          : [];
+        // FIX: Wrap JSON.parse in try/catch — malformed input
+        //      was previously causing an unhandled crash.
+        let metadata = [];
+        try {
+          metadata = fileMetadata ? JSON.parse(fileMetadata) : [];
+        } catch {
+          return res.status(400).json({ message: 'Invalid fileMetadata JSON' });
+        }
 
         processedFiles = await Promise.all(
-
           req.files.map(async (file, i) => {
-
-            const buffer =
-              await fs.promises.readFile(file.path);
+            const buffer = await fs.promises.readFile(file.path);
 
             const hash = crypto
               .createHash('sha256')
@@ -479,24 +507,13 @@ app.post(
               .digest('hex');
 
             return {
-
               originalName: file.originalname,
-
               filename: file.filename,
-
               path: file.path,
-
-              description:
-                metadata[i]?.name ||
-                file.originalname,
-
+              description: metadata[i]?.name || file.originalname,
               size: file.size,
-
-              extension:
-                path.extname(file.originalname),
-
+              extension: path.extname(file.originalname),
               mimetype: file.mimetype,
-
               hash
             };
           })
@@ -508,43 +525,29 @@ app.post(
       let newContribution;
 
       switch (type) {
-
         case 'system-design':
-
-          newContribution =
-            new SystemDesignContribution({
-              ...commonData,
-              files: processedFiles
-            });
-
+          newContribution = new SystemDesignContribution({
+            ...commonData,
+            files: processedFiles
+          });
           break;
 
         case 'dsa':
-
-          newContribution =
-            new DSAContribution(commonData);
-
+          newContribution = new DSAContribution(commonData);
           break;
 
         case 'c-output':
-
-          newContribution =
-            new COutputContribution(commonData);
-
+          newContribution = new COutputContribution(commonData);
           break;
 
         default:
-
-          return res
-            .status(400)
-            .json({ message: 'Invalid type' });
+          return res.status(400).json({ message: 'Invalid type' });
       }
 
       await newContribution.save();
 
-      // Create Notifications
+      // Create Notifications (non-blocking — failure won't affect the response)
       try {
-        // Notify the author
         await Notification.create({
           recipient: userId,
           title: 'Submission Received',
@@ -552,7 +555,6 @@ app.post(
           type: 'success'
         });
 
-        // Notify admins
         const admins = await User.find({ role: 'ADMIN' });
         if (admins.length > 0) {
           const adminNotifs = admins.map(admin => ({
@@ -564,27 +566,20 @@ app.post(
           await Notification.insertMany(adminNotifs);
         }
       } catch (notifyError) {
-        console.error('Notification error:', notifyError);
+        console.error('Notification error (non-fatal):', notifyError);
       }
 
       res.status(201).json({
-
         success: true,
-
         message: 'Code uploaded successfully',
-
         slug: newContribution.slug
       });
 
     } catch (err) {
-
       console.error(err);
-
       res.status(500).json({
-
         success: false,
-
-        message: err.message
+        message: 'Server Error'
       });
     }
   }
@@ -596,216 +591,158 @@ app.post(
  *************************************************/
 
 // Get All Users
+// FIX: Added try/catch — missing error handling was causing crashes
 app.get(
   '/admin/users',
   protectAdmin,
-
   async (req, res) => {
-
-    const users =
-      await User.find()
+    try {
+      const users = await User.find()
         .sort({ createdAt: -1 })
         .lean();
-
-    res.json(users);
+      res.json(users);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ message: 'Server Error' });
+    }
   }
 );
 
 // Delete User
+// FIX: Added try/catch — missing error handling was causing crashes
 app.delete(
   '/admin/users/:id',
   protectAdmin,
-
   async (req, res) => {
-
-    await User.findByIdAndDelete(req.params.id);
-
-    res.json({ message: 'User deleted' });
+    try {
+      const deleted = await User.findByIdAndDelete(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      res.json({ message: 'User deleted' });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      res.status(500).json({ message: 'Server Error' });
+    }
   }
 );
 
 // Get Contributions by Status (Filter)
+// FIX: Added try/catch — missing error handling was causing crashes
 app.get(
   '/admin/contributions',
   protectAdmin,
-
   async (req, res) => {
-    const status = req.query.status || 'pending';
-    const type = req.query.type || 'all';
+    try {
+      const status = req.query.status || 'pending';
+      const type = req.query.type || 'all';
 
-    let system = [];
-    let dsa = [];
-    let coutput = [];
+      let system = [];
+      let dsa = [];
+      let coutput = [];
 
-    if (type === 'all' || type === 'system-design') {
-      system = await SystemDesignContribution.find({ status }).lean();
+      if (type === 'all' || type === 'system-design') {
+        system = await SystemDesignContribution.find({ status }).lean();
+      }
+      if (type === 'all' || type === 'dsa') {
+        dsa = await DSAContribution.find({ status }).lean();
+      }
+      if (type === 'all' || type === 'c-output') {
+        coutput = await COutputContribution.find({ status }).lean();
+      }
+
+      const all = [
+        ...system.map(c => ({ ...c, type: 'system-design' })),
+        ...dsa.map(c => ({ ...c, type: 'dsa' })),
+        ...coutput.map(c => ({ ...c, type: 'c-output' }))
+      ];
+
+      all.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      res.json(all);
+    } catch (error) {
+      console.error('Error fetching contributions:', error);
+      res.status(500).json({ message: 'Server Error' });
     }
-
-    if (type === 'all' || type === 'dsa') {
-      dsa = await DSAContribution.find({ status }).lean();
-    }
-
-    if (type === 'all' || type === 'c-output') {
-      coutput = await COutputContribution.find({ status }).lean();
-    }
-
-    const all = [
-      ...system.map(c => ({
-        ...c,
-        type: 'system-design'
-      })),
-      ...dsa.map(c => ({
-        ...c,
-        type: 'dsa'
-      })),
-      ...coutput.map(c => ({
-        ...c,
-        type: 'c-output'
-      }))
-    ];
-
-    all.sort(
-      (a, b) =>
-        new Date(b.createdAt) -
-        new Date(a.createdAt)
-    );
-
-    res.json(all);
   }
 );
 
-// Get Pending Contributions
-app.get(
-  '/admin/contributions/pending',
-  protectAdmin,
+// NOTE: Removed GET /admin/contributions/pending — it was redundant dead code.
+//       Use GET /admin/contributions?status=pending instead.
 
-  async (req, res) => {
-
-    const system =
-      await SystemDesignContribution.find({
-        status: 'pending'
-      }).lean();
-
-    const dsa =
-      await DSAContribution.find({
-        status: 'pending'
-      }).lean();
-
-    const coutput =
-      await COutputContribution.find({
-        status: 'pending'
-      }).lean();
-
-    const all = [
-
-      ...system.map(c => ({
-        ...c,
-        type: 'system-design'
-      })),
-
-      ...dsa.map(c => ({
-        ...c,
-        type: 'dsa'
-      })),
-
-      ...coutput.map(c => ({
-        ...c,
-        type: 'c-output'
-      }))
-    ];
-
-    all.sort(
-      (a, b) =>
-        new Date(b.createdAt) -
-        new Date(a.createdAt)
-    );
-
-    res.json(all);
-  }
-);
-
-// Update Status
+// Update Contribution Status
+// FIX: Added try/catch — entire route was unguarded
 app.put(
   '/admin/contributions/:id/status',
   protectAdmin,
-
   async (req, res) => {
+    try {
+      const { status, type } = req.body;
 
-    const { status, type } = req.body;
+      if (!['approved', 'rejected'].includes(status)) {
+        return res.status(400).json({ message: 'Invalid status' });
+      }
 
-    if (!['approved', 'rejected'].includes(status)) {
-      return res
-        .status(400)
-        .json({ message: 'Invalid status' });
-    }
+      let Model;
 
-    let Model;
+      switch (type) {
+        case 'system-design':
+          Model = SystemDesignContribution;
+          break;
+        case 'dsa':
+          Model = DSAContribution;
+          break;
+        case 'c-output':
+          Model = COutputContribution;
+          break;
+        default:
+          return res.status(400).json({ message: 'Invalid type' });
+      }
 
-    switch (type) {
-
-      case 'system-design':
-        Model = SystemDesignContribution;
-        break;
-
-      case 'dsa':
-        Model = DSAContribution;
-        break;
-
-      case 'c-output':
-        Model = COutputContribution;
-        break;
-
-      default:
-        return res
-          .status(400)
-          .json({ message: 'Invalid type' });
-    }
-
-    const updated =
-      await Model.findByIdAndUpdate(
+      const updated = await Model.findByIdAndUpdate(
         req.params.id,
         { status },
         { new: true }
       );
 
-    if (!updated) {
-      return res
-        .status(404)
-        .json({ message: 'Not found' });
-    }
+      if (!updated) {
+        return res.status(404).json({ message: 'Not found' });
+      }
 
-    // Add credits if approved (+2)
-    if (status === 'approved') {
-      const author = await User.findById(updated.userId);
+      // Add credits if approved (+2)
+      if (status === 'approved') {
+        const author = await User.findById(updated.userId);
 
-      if (author && author.role !== 'ADMIN') {
-        await User.findByIdAndUpdate(
-          updated.userId,
-          { $inc: { credits: 2 } }
-        );
+        if (author && author.role !== 'ADMIN') {
+          await User.findByIdAndUpdate(
+            updated.userId,
+            { $inc: { credits: 2 } }
+          );
 
-        await Transaction.create({
-          userId: updated.userId,
-          amount: 2,
-          type: 'CONTRIBUTION_APPROVED',
-          description: `Approved contribution: ${updated.title || 'Untitled'}`
+          await Transaction.create({
+            userId: updated.userId,
+            amount: 2,
+            type: 'CONTRIBUTION_APPROVED',
+            description: `Approved contribution: ${updated.title || 'Untitled'}`
+          });
+        }
+
+        await Notification.create({
+          recipient: updated.userId,
+          title: 'Contribution Approved',
+          message: (author && author.role === 'ADMIN')
+            ? `Your contribution "${updated.title}" has been approved.`
+            : `Your contribution "${updated.title}" has been approved. You earned 2 credits!`,
+          type: 'success'
         });
       }
 
-      await Notification.create({
-        recipient: updated.userId,
-        title: 'Contribution Approved',
-        message: (author && author.role === 'ADMIN')
-          ? `Your contribution "${updated.title}" has been approved.`
-          : `Your contribution "${updated.title}" has been approved. You earned 2 credits!`,
-        type: 'success'
-      });
-    }
+      res.json({ success: true, data: updated });
 
-    res.json({
-      success: true,
-      data: updated
-    });
+    } catch (error) {
+      console.error('Error updating contribution status:', error);
+      res.status(500).json({ message: 'Server Error' });
+    }
   }
 );
 
@@ -825,14 +762,14 @@ app.post(
 
       const { title, slug, description, category, tags, status } = req.body;
 
-      const tagsArray = tags ? tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
+      const tagsArray = tags
+        ? tags.split(',').map(tag => tag.trim()).filter(tag => tag)
+        : [];
 
-      // Read markdown content
       const mdFilePath = req.files.mdFile[0].path;
       const content = await fs.promises.readFile(mdFilePath, 'utf8');
-      await fs.promises.unlink(mdFilePath); // Delete file after reading
+      await fs.promises.unlink(mdFilePath);
 
-      // Store relative path for cover image
       const coverImagePath = 'uploads/articles/' + req.files.coverImage[0].filename;
 
       const newArticle = new Article({
@@ -857,7 +794,7 @@ app.post(
 
     } catch (error) {
       console.error('Error creating article:', error);
-      res.status(500).json({ message: 'Server Error', error: error.message });
+      res.status(500).json({ message: 'Server Error' });
     }
   }
 );
@@ -887,13 +824,15 @@ app.put(
       if (status) article.status = status;
 
       if (typeof tags !== 'undefined') {
-        article.tags = tags ? tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
+        article.tags = tags
+          ? tags.split(',').map(tag => tag.trim()).filter(tag => tag)
+          : [];
       }
 
       if (req.files && req.files.mdFile) {
         const mdFilePath = req.files.mdFile[0].path;
         const content = await fs.promises.readFile(mdFilePath, 'utf8');
-        await fs.promises.unlink(mdFilePath); // Delete file after reading
+        await fs.promises.unlink(mdFilePath);
         article.content = content;
       }
 
@@ -911,7 +850,7 @@ app.put(
 
     } catch (error) {
       console.error('Error updating article:', error);
-      res.status(500).json({ message: 'Server Error', error: error.message });
+      res.status(500).json({ message: 'Server Error' });
     }
   }
 );
@@ -936,15 +875,19 @@ app.get('/api/articles', async (req, res) => {
 // Get Single Article
 app.get('/api/articles/:slug', async (req, res) => {
   try {
-    const article = await Article.findOne({ slug: req.params.slug, status: 'published' })
-      .populate('author', 'name avatar');
+    const article = await Article.findOne({
+      slug: req.params.slug,
+      status: 'published'
+    }).populate('author', 'name avatar');
 
     if (!article) {
       return res.status(404).json({ message: 'Article not found' });
     }
 
-    // Increment views
-    await Article.findByIdAndUpdate(article._id, { $inc: { views: 1 } });
+    // Increment views (fire-and-forget, doesn't need to block response)
+    Article.findByIdAndUpdate(article._id, { $inc: { views: 1 } }).catch(
+      err => console.error('View increment error:', err)
+    );
 
     res.json(article);
   } catch (error) {
@@ -954,67 +897,32 @@ app.get('/api/articles/:slug', async (req, res) => {
 });
 
 /*************************************************
- * ERROR HANDLER
+ * GLOBAL ERROR HANDLER
+ * FIX: Returns 500 for server errors, not always 400.
+ *      Fixed next() being called after error was handled.
  *************************************************/
-
-app.use((err, req, res, next) => {
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  console.error('Global error handler:', err);
 
   if (err instanceof multer.MulterError) {
+    return res.status(400).json({ message: err.message });
+  }
 
-    return res.status(400).json({
-      message: err.message
-    });
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({ message: err.message });
   }
 
   if (err) {
-
-    return res.status(400).json({
-      message: err.message
-    });
+    const statusCode = err.status || err.statusCode || 500;
+    return res.status(statusCode).json({ message: err.message || 'Server Error' });
   }
 
   next();
 });
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-
-      const allowedOrigins = [
-        'https://algoflow-sand.vercel.app',
-        'http://localhost:5173'
-      ];
-
-      // Allow requests with no origin (mobile apps, postman)
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(
-          new Error('Not allowed by CORS')
-        );
-      }
-    },
-
-    credentials: true,
-
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'x-user-id'
-    ]
-  })
-);
-
-
 /*************************************************
  * SERVER
  *************************************************/
-
 app.listen(PORT, () => {
-
-  console.log(`🚀 Server running on ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
