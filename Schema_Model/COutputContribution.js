@@ -1,9 +1,5 @@
 const mongoose = require('mongoose');
 
-/*************************************************
- * MAIN SCHEMA
- *************************************************/
-
 const COutputContributionSchema = new mongoose.Schema({
 
   title: {
@@ -16,41 +12,49 @@ const COutputContributionSchema = new mongoose.Schema({
   slug: {
     type: String,
     required: true,
-    unique: true,
+    unique: true,        // unique already creates an index
     lowercase: true,
     trim: true
   },
 
   description: {
     type: String,
-    trim: true
+    trim: true,
+    maxlength: 500
   },
 
   difficulty: {
     type: String,
     enum: ['Easy', 'Medium', 'Hard'],
-    default: 'Medium',
-    index: true
+    default: 'Medium'
+    // FIX: Removed index:true — this field is covered by the
+    //      compound index { status, difficulty, category } below.
+    //      Having index:true here as well created a duplicate index.
   },
 
   category: {
     type: String,
     default: 'General',
-    index: true
+    trim: true           // FIX: Added trim — was missing
+    // FIX: Removed index:true — covered by compound index below
   },
 
   authorName: {
     type: String,
-    required: true
+    required: true,
+    trim: true           // FIX: Added trim
   },
 
-  authorProfileUrl: String,
+  authorProfileUrl: {
+    type: String,
+    trim: true
+  },
 
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
-    index: true
+    required: true
+    // FIX: Removed index:true — defined explicitly below
   },
 
   /******** C OUTPUT CONTENT ********/
@@ -78,55 +82,49 @@ const COutputContributionSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],
-    default: 'pending',
-    index: true
+    default: 'pending'
+    // FIX: Removed index:true — covered by compound index below
   },
 
-  /******** BLOG METRICS ********/
+  /******** METRICS ********/
 
   views: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0              // FIX: Counters should never go negative
   },
 
   likesCount: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0
   },
 
   commentsCount: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0
   }
 
 }, {
   timestamps: true
 });
 
-
 /*************************************************
  * INDEXES
  *************************************************/
 
-// Recent first
 COutputContributionSchema.index({ createdAt: -1 });
+COutputContributionSchema.index({ userId: 1 });
 
-// Search
+// Full-text search
 COutputContributionSchema.index({
   title: 'text',
   description: 'text',
   explanation: 'text'
 });
 
-// Filter
-COutputContributionSchema.index({
-  status: 1,
-  difficulty: 1,
-  category: 1
-});
+// Compound filter (status + difficulty + category in one query)
+COutputContributionSchema.index({ status: 1, difficulty: 1, category: 1 });
 
-
-module.exports = mongoose.model(
-  'COutputContribution',
-  COutputContributionSchema
-);
+module.exports = mongoose.model('COutputContribution', COutputContributionSchema);
