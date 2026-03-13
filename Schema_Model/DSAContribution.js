@@ -1,9 +1,5 @@
 const mongoose = require('mongoose');
 
-/*************************************************
- * MAIN SCHEMA
- *************************************************/
-
 const DSAContributionSchema = new mongoose.Schema({
 
   title: {
@@ -15,42 +11,49 @@ const DSAContributionSchema = new mongoose.Schema({
 
   slug: {
     type: String,
-    unique: true,
-    lowercase: true,
+    required: true,      // FIX: Was missing required:true — the only contribution
+    unique: true,        //      schema without it, meaning slugless DSA docs could
+    lowercase: true,     //      be saved, breaking all slug-based lookups silently.
     trim: true
   },
 
   description: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    maxlength: 500
   },
 
   difficulty: {
     type: String,
     enum: ['Easy', 'Medium', 'Hard'],
-    default: 'Medium',
-    index: true
+    default: 'Medium'
+    // FIX: Removed index:true — covered by compound index below
   },
 
   category: {
     type: String,
     required: true,
-    index: true
+    trim: true           // FIX: Added trim — was missing
+    // FIX: Removed index:true — covered by compound index below
   },
 
   authorName: {
     type: String,
-    required: true
+    required: true,
+    trim: true           // FIX: Added trim
   },
 
-  authorProfileUrl: String,
+  authorProfileUrl: {
+    type: String,
+    trim: true
+  },
 
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
-    index: true
+    required: true
+    // FIX: Removed index:true — defined explicitly below
   },
 
   /******** DSA CONTENT ********/
@@ -58,9 +61,10 @@ const DSAContributionSchema = new mongoose.Schema({
   codeLanguage: {
     type: String,
     enum: ['java', 'c', 'cpp', 'python'],
-    default: 'java',
-    lowercase: true,
-    index: true
+    default: 'java'
+    // FIX: Removed index:true — covered by compound index below
+    // NOTE: lowercase:true is redundant here since the enum
+    //       already enforces lowercase values
   },
 
   codeSnippet: {
@@ -89,55 +93,52 @@ const DSAContributionSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],
-    default: 'pending',
-    index: true
+    default: 'pending'
+    // FIX: Removed index:true — covered by compound index below
   },
 
-  /******** BLOG METRICS ********/
+  /******** METRICS ********/
 
   views: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0              // FIX: Counters should never go negative
   },
 
   likesCount: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0
   },
 
   commentsCount: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0
   }
 
 }, {
   timestamps: true
 });
 
-
 /*************************************************
  * INDEXES
  *************************************************/
 
-// Fast listing
 DSAContributionSchema.index({ createdAt: -1 });
+DSAContributionSchema.index({ userId: 1 });
 
-// Search
+// Full-text search
 DSAContributionSchema.index({
   title: 'text',
   description: 'text',
   explanation: 'text'
 });
 
-// Filter
-DSAContributionSchema.index({
-  status: 1,
-  difficulty: 1,
-  category: 1
-});
+// Compound filter
+DSAContributionSchema.index({ status: 1, difficulty: 1, category: 1 });
 
+// Language filter (common query: "show all approved Java DSA questions")
+DSAContributionSchema.index({ codeLanguage: 1, status: 1 });
 
-module.exports = mongoose.model(
-  'DSAContribution',
-  DSAContributionSchema
-);
+module.exports = mongoose.model('DSAContribution', DSAContributionSchema);
