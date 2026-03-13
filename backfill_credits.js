@@ -7,32 +7,44 @@ const connectDB = async () => {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('✅ MongoDB connected');
   } catch (err) {
-    console.error('❌ MongoDB connection failed', err);
+    console.error('❌ MongoDB connection failed:', err);
     process.exit(1);
   }
 };
 
 const run = async () => {
   await connectDB();
-
   console.log('Backfilling credits for existing users...');
 
   try {
-    // Find users where 'credits' field does not exist and set it to 100
+    // FIX: Also catch users where credits exists but is null,
+    //      not just where the field is completely absent.
     const result = await User.updateMany(
-      { credits: { $exists: false } },
+      {
+        $or: [
+          { credits: { $exists: false } },
+          { credits: null }
+        ]
+      },
       { $set: { credits: 100 } }
     );
 
-    console.log(`✅ Backfill complete.`);
-    console.log(`Matched: ${result.matchedCount}`);
-    console.log(`Updated: ${result.modifiedCount}`);
+    console.log('✅ Backfill complete.');
+    console.log(`   Matched : ${result.matchedCount}`);
+    console.log(`   Updated : ${result.modifiedCount}`);
 
   } catch (error) {
     console.error('❌ Error during backfill:', error);
+    process.exitCode = 1; // mark failure without throwing
+  } finally {
+    // FIX: Always close the DB connection cleanly,
+    //      whether the update succeeded or failed.
+    await mongoose.connection.close();
+    console.log('🔌 MongoDB connection closed.');
   }
-
-  process.exit(0);
 };
 
-run();
+run().catch((err) => {
+  console.error('❌ Unexpected error:', err);
+  process.exit(1);
+});
